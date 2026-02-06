@@ -220,7 +220,7 @@ def calculate_bucket_averages(visuals, labels):
             averages[i] = np.mean(visuals[mask], axis=0).astype(np.uint8)
     return averages
 
-def show_outliers(visuals, labels, ref_averages, title, model_preds=None):
+def show_outliers(visuals, labels, ref_averages, title, model_preds=None, save_path=None):
     fig, axes = plt.subplots(6, 11, figsize=(18, 11))
     ax_f = axes.flatten()
     for i, char in enumerate(ALPHABET):
@@ -250,7 +250,12 @@ def show_outliers(visuals, labels, ref_averages, title, model_preds=None):
         ax_f[i].imshow(combined, cmap='magma')
         ax_f[i].set_title(f"'{char}' ({line},{col}){meta}", fontsize=7)
         ax_f[i].axis('off')
-    plt.suptitle(title, fontsize=16); plt.tight_layout(); plt.show()
+    plt.suptitle(title, fontsize=16); plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+        plt.close(fig)
+    else:
+        plt.show()
 
 def main():
     parser = argparse.ArgumentParser()
@@ -277,7 +282,9 @@ def main():
         except Exception as e:
             log(f"Warning: Could not load config: {e}. Re-detecting grid.")
 
-    visuals, detected_params = extract_cells(args.image, args.lines, grid_params=grid_params, debug=args.debug)
+    # Suppress grid debug view if in inference mode with an output path
+    grid_debug = args.debug and not (not args.train_path and args.output)
+    visuals, detected_params = extract_cells(args.image, args.lines, grid_params=grid_params, debug=grid_debug)
     if visuals is None: return
 
     if args.train_path:
@@ -365,7 +372,8 @@ def main():
 
     if args.debug:
         inf_averages = calculate_bucket_averages(visuals, pred_indices)
-        show_outliers(visuals, pred_indices, inf_averages, "Inference Bucket Deviations")
+        pf_path = (os.path.splitext(args.output)[0] + "-proof.png") if (not args.train_path and args.output) else None
+        show_outliers(visuals, pred_indices, inf_averages, "Inference Bucket Deviations", save_path=pf_path)
 
 if __name__ == "__main__":
     try:
