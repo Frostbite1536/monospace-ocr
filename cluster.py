@@ -242,8 +242,9 @@ def extract_cells(image_path, num_lines, grid_params=None, debug=False):
     cells = []
     for r in range(num_lines):
         for c in range(EXPECTED_COLS):
+            # Fix clipping at extreme right/left by expanding margins.
             y1, y2 = int(ys + r * h_step), int(ys + (r + 1) * h_step)
-            x1, x2 = int(xs + c * w_step), int(xs + (c + 1) * w_step)
+            x1, x2 = int(xs + c * w_step - 0.5), int(xs + (c + 1) * w_step + 0.5)
             cell_raw = inv[max(0, y1) : y2, max(0, x1) : x2]
             cells.append(normalize_character_soft(cell_raw, h_step))
 
