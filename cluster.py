@@ -127,26 +127,60 @@ def extract_cells(image_path, num_lines, grid_params=None, debug=False):
 
     if grid_params:
         xs, ys, wt, ht = grid_params
-        log(f"Using cached grid: x={xs}, y={ys}, w={wt}, h={ht}")
+        log(f"Using cached grid: x={xs:.1f}, y={ys:.1f}, w={wt:.1f}, h={ht:.1f}")
     else:
         _, mask = cv2.threshold(inv, 10, 255, cv2.THRESH_BINARY)
         coords = cv2.findNonZero(mask)
         if coords is None: return None, None
         gx, gy, gw, gh = cv2.boundingRect(coords)
         xs, ys, wt, ht = solve_grid_2d(inv, gx, gy, gw, gh, num_lines)
-        log(f"Detected new grid: x={xs}, y={ys}, w={wt}, h={ht}")
+        log(f"Detected grid: x={xs}, y={ys}, w={wt}, h={ht}")
 
     w_step, h_step = wt / EXPECTED_COLS, ht / num_lines
 
     if debug:
-        dbg = cv2.cvtColor(inv, cv2.COLOR_GRAY2BGR)
+        # Pad image slightly so labels are always visible
+        pad = 40
+        dbg_base = cv2.copyMakeBorder(inv, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=0)
+        dbg = cv2.cvtColor(dbg_base, cv2.COLOR_GRAY2BGR)
+
+        # Adjust grid coordinates for padding
+        pxs, pys = xs + pad, ys + pad
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        f_scale = 0.35
+        color_line = (0, 255, 0)
+        color_txt = (0, 255, 255)
+
+        # 1-indexed Row Labels (Left and Right)
         for r in range(num_lines + 1):
-            y = int(ys + r * h_step)
-            cv2.line(dbg, (int(xs), y), (int(xs + wt), y), (0, 255, 0), 1)
+            y = int(pys + r * h_step)
+            cv2.line(dbg, (int(pxs), y), (int(pxs + wt), y), color_line, 1)
+            if r < num_lines:
+                y_mid = int(pys + (r + 0.6) * h_step)
+                # Left
+                cv2.putText(dbg, str(r+1), (int(pxs) - 30, y_mid), font, f_scale, color_txt, 1)
+                # Right
+                cv2.putText(dbg, str(r+1), (int(pxs + wt) + 5, y_mid), font, f_scale, color_txt, 1)
+
+        # 1-indexed Column Labels (Top and Bottom)
         for c in range(EXPECTED_COLS + 1):
-            x = int(xs + c * w_step)
-            cv2.line(dbg, (x, int(ys)), (x, int(ys + ht)), (0, 255, 0), 1)
-        plt.figure(figsize=(8, 8)); plt.imshow(dbg); plt.title("Grid Overlay"); plt.show()
+            x = int(pxs + c * w_step)
+            cv2.line(dbg, (x, int(pys)), (x, int(pys + ht)), color_line, 1)
+            if c < EXPECTED_COLS and ((c + 1) % 5 == 0 or c == 0 or c == EXPECTED_COLS - 1):
+                x_mid = int(pxs + c * w_step + 2)
+                # Top
+                cv2.putText(dbg, str(c+1), (x_mid, int(pys) - 10), font, f_scale, color_txt, 1)
+                # Bottom
+                cv2.putText(dbg, str(c+1), (x_mid, int(pys + ht) + 20), font, f_scale, color_txt, 1)
+
+        fig = plt.figure(figsize=(14, 10))
+        # This allows the image to expand when the window is maximized
+        ax = fig.add_subplot(111)
+        ax.imshow(dbg)
+        ax.set_title("Grid Debug View (1,1-indexed Labels on All Sides)")
+        ax.axis('off')
+        plt.tight_layout()
+        plt.show()
 
     cells = []
     for r in range(num_lines):
@@ -161,31 +195,21 @@ def extract_cells(image_path, num_lines, grid_params=None, debug=False):
 def parse_training_file(path, line_offset):
     if not os.path.exists(path):
         raise FileNotFoundError(f"Training file not found: {path}")
-
     with open(path, "r", encoding="utf-8") as f:
         raw_lines = f.read().splitlines()
-
     while raw_lines and not raw_lines[-1].strip():
         raw_lines.pop()
 
     labels = []
     char_to_idx = {c: i for i, c in enumerate(ALPHABET)}
-
     for r_idx, line in enumerate(raw_lines):
+        grid_row = r_idx + 1 + line_offset
         if len(line) != EXPECTED_COLS:
-            raise ValueError(
-                f"Format Error in {path}: Line {r_idx + 1} (Grid Line {r_idx + 1 + line_offset}) "
-                f"has length {len(line)}, but expected {EXPECTED_COLS}."
-            )
-
+            raise ValueError(f"Format Error in {path}: Row {grid_row} length is {len(line)}, expected {EXPECTED_COLS}.")
         for c_idx, char in enumerate(line):
             if char not in char_to_idx:
-                raise ValueError(
-                    f"Alphabet Error in {path}: Invalid character '{char}' "
-                    f"at Grid Coordinate ({r_idx + 1 + line_offset}, {c_idx + 1})."
-                )
+                raise ValueError(f"Alphabet Error: '{char}' at ({grid_row}, {c_idx+1}) not in ALPHABET.")
             labels.append(char_to_idx[char])
-
     return np.array(labels), len(raw_lines)
 
 def calculate_bucket_averages(visuals, labels):
