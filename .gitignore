@@ -1,2 +1,6 @@
 *-proof*.png
 page-*.txt
+target/
+*.pdf
+grid_config.json
+weights

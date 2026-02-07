@@ -73,7 +73,7 @@ fn process_base64_stream<R: BufRead>(mut reader: R, strict: bool, quiet: bool) -
             let is_other_whitespace = ch.is_whitespace() && !is_newline;
 
             if is_newline {
-                continue; // Always ignore newlines
+                continue;
             }
 
             if strict && is_other_whitespace {
